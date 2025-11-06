@@ -54,15 +54,14 @@ def main(args):
 
 		for overhead in overhead_list:
 
-			#for beta in beta_list:
-			#metrics = calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta)
-			#inf_time, ee_prob, _ = ee_nn_calibration.compute_inference_time(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)
+			for beta in beta_list:
+				metrics = calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta)
 
-			acc_edge = ee_nn_calibration.theoretical_accuracy_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)
-			acc_exp, _ = ee_nn_calibration.exp_acc_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)			
+			#acc_edge = ee_nn_calibration.theoretical_accuracy_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)
+			#acc_exp, _ = ee_nn_calibration.exp_acc_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)			
 			#print(f"Threshold:{threshold}, Overhead: {overhead}, Inf time: {inf_time}, EE prob: {ee_prob}")
-			print(f"Threshold:{threshold}, Overhead: {overhead}, Acc Edge: {acc_edge}")
-			print(f"Threshold:{threshold}, Overhead: {overhead}, Acc EXP: {acc_exp}")
+			#print(f"Threshold:{threshold}, Overhead: {overhead}, Acc Edge: {acc_edge}")
+			#print(f"Threshold:{threshold}, Overhead: {overhead}, Acc EXP: {acc_exp}")
 
 
 			#sys.exit()

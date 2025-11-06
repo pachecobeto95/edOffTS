@@ -57,7 +57,7 @@ def theo_beta_function(temp_list, n_branches, threshold, df_edge, df_cloud, beta
 	print("Acc Device: %s"%acc)
 	print("Acc Exp: %s"%(exp_acc))
 
-	return f, ee_prob
+	return f, inf_time, acc, ee_prob
 
 
 def calibrating_confs(temp_list, n_branches, df_edge, n_classes):

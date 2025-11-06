@@ -20,6 +20,33 @@ def calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overh
     return calibration_func()
 
 
+def save_results(theta, loss, inf_time, acc, ee_prob, beta, overhead, threshold, filepath):
+	"""
+	Save the current experiment results into a DataFrame and append them to a CSV file.
+	"""
+
+	df_results = pd.DataFrame()
+
+	# Ensure theta is a numpy array
+	theta = np.array(theta)
+
+	# Create a dictionary for the new row
+	result_row = {"loss": loss, "inference_time": inf_time, "accuracy": acc,"ee_prob": ee_prob, "beta": beta, "overhead": overhead, "threshold": threshold}
+
+	# Add theta components as individual columns
+	for i, t in enumerate(theta):
+		result_row[f"theta_{i+1}"] = t
+
+	df_row = pd.DataFrame([result_row])
+
+	# Check if the file already exists
+	file_exists = os.path.isfile(filepath)
+
+	# Append to file (write header only if the file doesn’t exist yet)
+	df_row.to_csv(filepath, mode='a', index=False, header=not file_exists)
+
+
+
 def main(args):
 
 	n_classes = config.dataset_config[args.dataset_name]["n_classes"]
@@ -30,6 +57,8 @@ def main(args):
 		args.n_branches, args.dataset_name))
 
 	#ee_model = ee_dnns.load_eednn_model(args, n_classes, model_path, device)
+
+	results_path = "results_%s.csv"%(args.calibration_type)
 
 	inf_data_dir_path = os.path.join(config.DIR_PATH, "inference_data")
 
@@ -48,14 +77,15 @@ def main(args):
 	overhead_list = np.arange(0, 100, 5)
 	beta_list = np.arange(0, 100, 5)
 
-	temp_list = np.ones(10)
+	temp_list = np.ones(n_classes)
 
 	for threshold in threshold_list:
 
 		for overhead in overhead_list:
 
 			for beta in beta_list:
-				metrics = calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta)
+				theta, loss, inf_time, acc, ee_prob = calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta)
+				save_results(theta, loss, inf_time, acc, ee_prob, beta, overhead, threshold, results_path)
 
 			#acc_edge = ee_nn_calibration.theoretical_accuracy_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)
 			#acc_exp, _ = ee_nn_calibration.exp_acc_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)			

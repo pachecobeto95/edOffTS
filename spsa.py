@@ -106,8 +106,8 @@ class SPSA(object):
 
 		# 3. Evaluate the objective function at the perturbed points (2 calls)
 		# Assuming objective_fn returns a scalar (the cost/loss)
-		L_plus, _ = self._compute_loss(theta_plus)
-		L_minus, _ = self._compute_loss(theta_minus)
+		L_plus, _, _, _ = self._compute_loss(theta_plus)
+		L_minus, _, _, _ = self._compute_loss(theta_minus)
 
 		# 4. Estimate the gradient (element-wise)
 		# (Loss difference / 2 * total perturbation)
@@ -127,7 +127,7 @@ class SPSA(object):
 		dim = len(current_theta)
 
 		best_theta = current_theta.copy()
-		best_loss, _ = self._compute_loss(best_theta)
+		best_loss, _, _, _ = self._compute_loss(best_theta)
 
 		#print(f"Start: Loss = {best_loss:.6f}, Dimension = {dim}")
 		print("Start: Loss = %s, Dimension = %s"%(best_loss, dim))
@@ -141,7 +141,7 @@ class SPSA(object):
 			# gradient_approx is g_k(theta_k)
 			gradient_approx, L_plus, L_minus = self._estimate_gradient(current_theta, ck)
 
-			print(ak, gradient_approx)
+			#print(ak, gradient_approx)
 
 			# 3. Update the parameter vector
 			# theta_{k+1} = theta_k - a_k * g_k(theta_k)
@@ -161,6 +161,7 @@ class SPSA(object):
 			print(best_theta)
 
 		# Return the best point found
-		final_loss, _ = self._compute_loss(best_theta)
+		final_loss, inf_time, acc, ee_prob = self._compute_loss(best_theta)
 		print(f"\nOptimization completed. Final Best Loss: {final_loss:.6f}")
-		return best_theta
+		print("Optimization completed. Final Best Loss: %s, Final Acc Edge: %s, Final Inf Time: %s, Final EE Prob: %s"%(final_loss, inf_time, acc, ee_prob))
+		return best_theta, final_loss, inf_time, acc, ee_prob

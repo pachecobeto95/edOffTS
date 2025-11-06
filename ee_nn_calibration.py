@@ -2,34 +2,16 @@ import numpy as np
 import torch.optim as optim
 import torch.nn as nn
 import pandas as pd
-import argparse, config, torch, os, ee_dnns, utils, sys, ee_nn_calibration
+import argparse, config, torch, os, ee_dnns, utils, sys, ee_nn_calibration, spsa
 from tqdm import tqdm
 from scipy.stats import beta
 
 
-class Bernoulli(object):
-	'''
-	Bernoulli Perturbation distributions.
-	'''
-	# This class generates a bernoulli vector
-
-	def __init__(self, dim, r=1):
-		#dim - provides the dimension of the bernoulli vector
-		#r - he values thar the bernoulli vector may assume. 
-
-		self.dim = dim
-		self.r = r
-
-	def __call__(self):
-		# When this method is called, it returns the Bernoulli vector that works as delta vector to estimate
-		# the gradient.
-		return np.array([random.choice((-self.r, self.r)) for _ in range(self.dim)])
 
 
-def exp_acc_edge(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, dataset_name):
+def exp_acc_edge(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, n_classes):
 
 	n_samples = len(df_edge)
-	n_classes = config.dataset_config[dataset_name]["n_classes"]
 
 	# --- Compute calibrated confidences per branch ---
 	calib_confs = calibrating_confs(temp_list, n_branches, df_edge, n_classes)
@@ -61,16 +43,19 @@ def exp_acc_edge(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, 
 
 
 
-def theo_beta_function(temp_list, n_branches, threshold, df_edge, df_cloud, beta, overhead):
+def theo_beta_function(temp_list, n_branches, threshold, df_edge, df_cloud, beta, overhead, n_classes):
 
-
-
-	inf_time_current, _, _ = compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, overhead)
+	inf_time, _, _ = compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, n_classes)
 
 	#The following line computes the on-device accuracy using our theoretical model
-	acc, ee_prob = theoretical_accuracy_edge(temp_list, n_branches, threshold, df_edge)
+	acc, ee_prob = theoretical_accuracy_edge(temp_list, n_branches, threshold, df_edge, overhead, n_classes)
 	
 	f = inf_time - beta*acc
+
+	exp_acc, _ = exp_acc_edge(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, n_classes)
+
+	print("Acc Device: %s"%acc)
+	print("Acc Exp: %s"%(exp_acc))
 
 	return f, ee_prob
 
@@ -89,9 +74,7 @@ def calibrating_confs(temp_list, n_branches, df_edge, n_classes):
 	return calib_confs
 
 
-def theoretical_accuracy_edge(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, dataset_name):
-
-	n_classes = config.dataset_config[dataset_name]["n_classes"]
+def theoretical_accuracy_edge(temp_list, n_branches, threshold, df_edge, overhead, n_classes):
 
 	calib_confs = calibrating_confs(temp_list, n_branches, df_edge, n_classes)
 
@@ -106,11 +89,11 @@ def theoretical_accuracy_edge(temp_list, n_branches, threshold, df_edge, df_clou
 		success_prob = compute_success_probability(df_edge, temp_list, i, calib_confs[i], threshold)
 		sum_success_prob += success_prob
 
-	print(sum_success_prob, ee_prob_edge)
+	#print(sum_success_prob, ee_prob_edge)
 	acc_edge = sum_success_prob/ee_prob_edge if (ee_prob_edge > 0) else 0.0
-	print(acc_edge)
+	#print(acc_edge)
 
-	return acc_edge
+	return acc_edge, ee_prob_edge
 
 
 def estimate_joint_prob_conditional(calib_confs, threshold, f_values, n_bins=100):
@@ -164,7 +147,7 @@ def compute_success_probability(df_edge, temp_list, i_branch, calib_confs, thres
 	return integral_sum
 
 
-def compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, dataset_name):
+def compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, overhead, n_classes):
 	"""
 	Compute the average inference time and early-exit probability across multiple branches 
 	of an early-exit DNN, considering temperature scaling calibration and cloud overhead.
@@ -176,8 +159,6 @@ def compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, 
 	avg_inference_time = 0.0
 	n_exit_per_branch = np.zeros(n_branches)
 	total_exited = 0
-
-	n_classes = config.dataset_config[dataset_name]["n_classes"]
 
 	calib_confs = calibrating_confs(temp_list, n_branches, df_edge, n_classes)
 
@@ -211,6 +192,17 @@ def compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, 
 	avg_inference_time /= float(n_samples)
 	early_exit_prob = total_exited / float(n_samples)
 
+	'''
+	# Usa a normalização Min-Max
+	time_range = T_max - T_min
+
+	if time_range <= 0:
+		# Caso degenerado (tempos min e max iguais)
+		avg_inference_time_norm = 1.0 
+	else:
+		avg_inference_time_norm = (avg_inference_time - T_min) / time_range
+	'''
+
 	return avg_inference_time, early_exit_prob, n_exit_per_branch
 
 
@@ -218,8 +210,6 @@ def compute_inference_time(temp_list, n_branches, threshold, df_edge, df_cloud, 
 class EE_Calibration(object):
 	def __init__(self, args, df_inf_edge, df_inf_cloud, threshold, overhead, beta):
 		self.args = args
-		#self.ee_model = ee_model
-		#self.test_loader = test_loader
 		self.df_inf_edge = df_inf_edge
 		self.df_inf_cloud = df_inf_cloud
 		self.threshold = threshold
@@ -228,5 +218,6 @@ class EE_Calibration(object):
 
 
 	def calibrationEEDNN_SPSA(self):
-		optim_spsa = spsa.SPSA(args, theo_beta_function, df_edge, df_inf_cloud, threshold, overhead, beta)
+		temp_list = np.ones(10)
+		optim_spsa = spsa.SPSA(self.args, theo_beta_function, temp_list, self.df_inf_edge, self.df_inf_cloud, self.threshold, self.overhead, self.beta)
 		return optim_spsa.min()

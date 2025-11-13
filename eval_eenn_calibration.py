@@ -2,11 +2,13 @@ import numpy as np
 import torch.optim as optim
 import torch.nn as nn
 import pandas as pd
-import argparse, config, torch, os, ee_dnns, utils, sys, ee_nn_calibration
+import argparse, config, torch, os, ee_dnns, utils, sys, ee_nn_calibration 
 from tqdm import tqdm
+import itertools
+from joblib import Parallel, delayed
 
 
-def calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta):
+def calibrating_eenn(args, temp_list, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta):
 
     calibration_method = f"calibrationEEDNN_{args.calibration_type.upper()}"
 
@@ -17,10 +19,11 @@ def calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overh
     if calibration_func is None:
         raise ValueError(f"Unsupported calibration method: {args.calibration_type}")
 
-    return calibration_func()
+    return calibration_func(temp_list)
 
 
-def save_results(theta, loss, inf_time, acc, ee_prob, beta, overhead, threshold, filepath):
+def save_results(theta, loss, inf_time, acc, exp_acc, ee_prob, beta, overhead, threshold, ts_type, 
+	temp_init, filepath):
 	"""
 	Save the current experiment results into a DataFrame and append them to a CSV file.
 	"""
@@ -31,7 +34,8 @@ def save_results(theta, loss, inf_time, acc, ee_prob, beta, overhead, threshold,
 	theta = np.array(theta)
 
 	# Create a dictionary for the new row
-	result_row = {"loss": loss, "inference_time": inf_time, "accuracy": acc,"ee_prob": ee_prob, "beta": beta, "overhead": overhead, "threshold": threshold}
+	result_row = {"loss": loss, "inference_time": inf_time, "accuracy": acc, "exp_acc": exp_acc,"ee_prob": ee_prob, 
+	"beta": beta, "overhead": overhead, "threshold": threshold, "ts_type": ts_type, "temp_init": temp_init}
 
 	# Add theta components as individual columns
 	for i, t in enumerate(theta):
@@ -51,14 +55,14 @@ def main(args):
 
 	n_classes = config.dataset_config[args.dataset_name]["n_classes"]
 
-	device = torch.device('cuda' if ((torch.cuda.is_available()) and (args.location == "desktop")) else 'cpu')
+	device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
 
 	model_path = os.path.join(config.DIR_PATH, "models", "ee_model_%s_%s_branches_%s.pth"%(args.model_name, 
 		args.n_branches, args.dataset_name))
 
 	#ee_model = ee_dnns.load_eednn_model(args, n_classes, model_path, device)
 
-	results_path = "results_%s.csv"%(args.calibration_type)
+	results_path = "results_%s_%s.csv"%(args.calibration_type, args.ts_type)
 
 	inf_data_dir_path = os.path.join(config.DIR_PATH, "inference_data")
 
@@ -73,35 +77,35 @@ def main(args):
 	df_inf_data_edge, df_inf_data_cloud = pd.read_csv(inf_data_edge_path), pd.read_csv(inf_data_cloud_path)
 
 
-	threshold_list = np.round(np.arange(0.5, 1.05, 0.05), 2)
-	overhead_list = np.arange(0, 100, 5)
-	beta_list = np.arange(0, 100, 5)
+	threshold_list = np.round(np.arange(0.75, 0.85, 0.05), 2)
+	overhead_list = np.round(np.arange(0, 0.04, 0.002), 3)
+	#beta_list = [0, 1, 4, 4.1, 4.5, 4.6, 4.7, 4.8, 4.9, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6]
+	#beta_list = [15]
 
-	temp_list = np.ones(n_classes)
+	beta_list = np.concatenate((np.round(np.arange(0, 4.5, 0.5), 2), np.round(np.arange(4, 15, 0.1), 2)))
 
-	for threshold in threshold_list:
+	temp_init_list = [1, 1.2, 1.5]
 
-		for overhead in overhead_list:
+	param_grid = itertools.product(temp_init_list, threshold_list, overhead_list, beta_list)
+	
+	for temp_init, threshold, overhead, beta in tqdm(param_grid):
 
-			for beta in beta_list:
-				theta, loss, inf_time, acc, ee_prob = calibrating_eenn(args, df_inf_data_edge, df_inf_data_cloud, threshold, overhead, beta)
-				save_results(theta, loss, inf_time, acc, ee_prob, beta, overhead, threshold, results_path)
+		print("Init Temp: %s, TS Type: %s, Threshold: %s, Overhead: %s, Beta: %s"%(temp_init, args.ts_type, 
+			threshold, overhead, beta))
 
-			#acc_edge = ee_nn_calibration.theoretical_accuracy_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)
-			#acc_exp, _ = ee_nn_calibration.exp_acc_edge(temp_list, args.n_branches, threshold, df_inf_data_edge, df_inf_data_cloud, overhead, args.dataset_name)			
-			#print(f"Threshold:{threshold}, Overhead: {overhead}, Inf time: {inf_time}, EE prob: {ee_prob}")
-			#print(f"Threshold:{threshold}, Overhead: {overhead}, Acc Edge: {acc_edge}")
-			#print(f"Threshold:{threshold}, Overhead: {overhead}, Acc EXP: {acc_exp}")
+		temp_list = temp_init*np.ones(1) if(args.ts_type == 'pure_ts') else temp_init*np.ones(n_classes)
 
+		theta, loss, inf_time, acc, ee_prob = calibrating_eenn(args, temp_list, df_inf_data_edge, 
+			df_inf_data_cloud, threshold, overhead, beta)
 
-			#sys.exit()
+		exp_acc, _ = ee_nn_calibration.exp_acc_edge(theta, args.n_branches, threshold, 
+			df_inf_data_edge, df_inf_data_cloud, overhead, n_classes)
 
-
-
+		save_results(theta, loss, inf_time, acc, exp_acc, ee_prob, beta, overhead, threshold, args.ts_type, temp_init, results_path)
 
 
 if (__name__ == "__main__"):
-	# Input Arguments to configure the early-exit model .
+	# Input Arguments to configure the early-exit model.
 	parser = argparse.ArgumentParser(description="Extract the confidences obtained by DNN inference for next experiments.")
 
 	#We here insert the argument dataset_name. 
@@ -127,6 +131,9 @@ if (__name__ == "__main__"):
 	#This argument defines the ratio to split the Traning Set, Val Set, and Test Set.
 	parser.add_argument('--n_rounds', type=int, default=100, help='Calibration Type')
 
+	##This argument defines the ratio to split the Traning Set, Val Set, and Test Set.
+	parser.add_argument('--ts_type', type=str, default='pure_ts', 
+		choices=['pure_ts', 'per_class_ts'], help='Pure TS or Per class TS')
 
 	args = parser.parse_args()
 

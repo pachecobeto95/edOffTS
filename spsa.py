@@ -23,12 +23,11 @@ class Bernoulli(object):
 		return np.array([random.choice((-self.r, self.r)) for _ in range(self.dim)])
 
 
-
-
-
 class SPSA(object):
 
-	def __init__(self, args, function, theta_list, df_edge, df_cloud, threshold, overhead, beta, n_rounds=1000, a=10, alpha=0.602, 
+	def __init__(self, args, function, theta_list, df_edge, df_cloud, threshold, overhead, beta,
+		n_rounds=100, 
+		a=2, alpha=0.602, 
 		c=0.1,  gamma=0.101):
 
 		"""
@@ -119,7 +118,8 @@ class SPSA(object):
 
 
 	def _compute_loss(self, theta):
-		return self.function(theta, self.args.n_branches, self.threshold, self.df_edge, self.df_cloud, self.beta, self.overhead, self.n_classes)
+		return self.function(theta, self.args.n_branches, self.threshold, self.df_edge, self.df_cloud, 
+			self.beta, self.overhead, self.n_classes)
 
 	def min(self):
 
@@ -130,7 +130,7 @@ class SPSA(object):
 		best_loss, _, _, _ = self._compute_loss(best_theta)
 
 		#print(f"Start: Loss = {best_loss:.6f}, Dimension = {dim}")
-		print("Start: Loss = %s, Dimension = %s"%(best_loss, dim))
+		#print("Start: Loss = %s, Dimension = %s"%(best_loss, dim))
 
 		for k in range(self.n_rounds):
 			# 1. Calculate the gain and perturbation coefficients
@@ -157,11 +157,12 @@ class SPSA(object):
 
 			# Optional: Print progress
 			#if (k + 1) % 100 == 0 or k == 0:
-			print(f"Iteration {k+1}/{self.n_rounds}: Approx. Loss = {current_loss:.6f}, Best Loss = {best_loss:.6f}")
-			print(best_theta)
+			#print(f"Iteration {k+1}/{self.n_rounds}: Approx. Loss = {current_loss:.6f}, Best Loss = {best_loss:.6f}")
+			#print(best_theta)
 
 		# Return the best point found
 		final_loss, inf_time, acc, ee_prob = self._compute_loss(best_theta)
-		print(f"\nOptimization completed. Final Best Loss: {final_loss:.6f}")
-		print("Optimization completed. Final Best Loss: %s, Final Acc Edge: %s, Final Inf Time: %s, Final EE Prob: %s"%(final_loss, inf_time, acc, ee_prob))
+		print("Optimization completed. Final Best Loss: %s, Final Acc Edge: %s, Final Inf Time: %s, Final EE Prob: %s"
+			%(final_loss, acc, inf_time, ee_prob))
+		
 		return best_theta, final_loss, inf_time, acc, ee_prob

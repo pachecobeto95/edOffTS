@@ -84,7 +84,9 @@ def main(args):
 
 	beta_list = np.concatenate((np.round(np.arange(0, 4.5, 0.5), 2), np.round(np.arange(4, 15, 0.1), 2)))
 
-	temp_init_list = [1, 1.2, 1.5]
+	beta_list = beta_list if(args.calibration_type == 'spsa') else [0]
+
+	temp_init_list = [1, 1.2, 1.5] if(args.calibration_type != 'no_calib') else [1]
 
 	param_grid = itertools.product(temp_init_list, threshold_list, overhead_list, beta_list)
 	
@@ -126,7 +128,7 @@ if (__name__ == "__main__"):
 	parser.add_argument('--split_ratio', type=float, default=config.split_ratio, help='Split Ratio')
 
 	#This argument defines the ratio to split the Traning Set, Val Set, and Test Set.
-	parser.add_argument('--calibration_type', type=str, choices=['spsa'], help='Calibration Type')
+	parser.add_argument('--calibration_type', type=str, choices=['spsa', 'ts', 'no_calib'], help='Calibration Type')
 
 	#This argument defines the ratio to split the Traning Set, Val Set, and Test Set.
 	parser.add_argument('--n_rounds', type=int, default=100, help='Calibration Type')

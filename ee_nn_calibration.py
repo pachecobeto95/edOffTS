@@ -2,7 +2,7 @@ import numpy as np
 import torch.optim as optim
 import torch.nn as nn
 import pandas as pd
-import argparse, config, torch, os, ee_dnns, utils, sys, ee_nn_calibration, spsa
+import argparse, config, torch, os, ee_dnns, utils, sys, ee_nn_calibration, spsa, ts
 from tqdm import tqdm
 from scipy.stats import beta
 from scipy.stats import gaussian_kde
@@ -299,3 +299,23 @@ class EE_Calibration(object):
 			self.df_inf_cloud, self.threshold, self.overhead, self.beta)
 		
 		return optim_spsa.min()
+
+	def calibrationEEDNN_TS(self, temp_list):
+
+		optim_ts = ts.TemperatureScaler(self.args, temp_list, self.df_inf_edge, 
+			self.df_inf_cloud, self.threshold, self.overhead, self.beta)
+		
+		return optim_ts.min()
+
+
+	def calibrationEEDNN_NO_CALIB(self, temp_list):
+
+		n_classes = config.dataset_config[self.args.dataset_name]["n_classes"]
+
+		loss, inf_time, exp_acc, ee_prob = ts.exp_beta_function(temp_list, self.args.n_branches, 
+			self.threshold, self.df_inf_edge, self.df_inf_cloud, self.beta, self.overhead, n_classes)
+
+		print("No Optimization completed. Best Loss: %s, Acc Edge: %s, Inf Time: %s, EE Prob: %s"
+			%(loss, exp_acc, inf_time, ee_prob))
+		
+		return temp_list, loss, inf_time, exp_acc, ee_prob
